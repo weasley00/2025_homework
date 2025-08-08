@@ -58,6 +58,37 @@ def verify_data(data: bytes, sig, pk: int):
     return (r - e) % 0xFFFFFFF == pk  # 关键验证点
 ```
 <img width="722" height="166" alt="image" src="https://github.com/user-attachments/assets/d44fbab7-e9a4-4f5d-beb2-ad8744d61787" />
+## 五、伪造中本聪的数字签名
+```python
+class SignatureForger:
+    def __init__(self, target_public_key, curve_n):
+        self.target_public_key = target_public_key
+        self.n = curve_n  # 曲线阶
+
+    def forge_signature(self, original_message, original_signature, new_message):
+        """
+        伪造签名步骤：
+        1. 获取原始签名(r, s)和对应的消息
+        2. 计算两个消息的哈希差
+        3. 推导私钥相关参数
+        4. 生成新消息的签名
+        """
+        r, s = original_signature
+
+        # 计算哈希值
+        e_orig = int.from_bytes(hashlib.sha256(original_message).digest(), 'big')
+        e_new = int.from_bytes(hashlib.sha256(new_message).digest(), 'big')
+
+        # 计算哈希差
+        delta_e = (e_new - e_orig) % self.n
+
+        # 推导新签名 (利用固定k漏洞)
+        # 关键修复：使用正确的数学公式
+        s_new = (s + delta_e * pow(r, -1, self.n)) % self.n
+
+        return (r, s_new)
+```
+<img width="1044" height="365" alt="image" src="https://github.com/user-attachments/assets/19e35512-ea98-46b0-9bf9-18ec368fb2b5" />
 
 
 
