@@ -1,0 +1,80 @@
+import os
+import random
+from hashlib import sha256
+
+# SM2 recommended curve parameters
+p = 0xFFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000FFFFFFFFFFFFFFFF
+a = 0xFFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000FFFFFFFFFFFFFFFC
+b = 0x28E9FA9E9D9F5E344D5AEF7E8B5D50A0C648FEE9A97A7E37BBA2DDF1D5
+n = 0xFFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFF7203DF6B21C6052B53BBF40939D54123
+Gx = 0x32C4AE2C1F1981195F9904466A39C9948FE30BBFF2660BE1715A4589334C74C7
+Gy = 0xBC3736A2F4F6779C59BDCEE36B692153D0A9877CC62A474002DF32E52139F0A0
+G = (Gx, Gy)
+
+# Modular inverse
+def mod_inv(x, m):
+    return pow(x, -1, m)
+
+# Point addition
+def point_add(P, Q):
+    if P == (0, 0): return Q
+    if Q == (0, 0): return P
+    if P[0] == Q[0] and (P[1] + Q[1]) % p == 0: return (0, 0)
+
+    if P == Q:
+        l = (3 * P[0] * P[0] + a) * mod_inv(2 * P[1], p) % p
+    else:
+        l = (Q[1] - P[1]) * mod_inv(Q[0] - P[0], p) % p
+
+    x_r = (l * l - P[0] - Q[0]) % p
+    y_r = (l * (P[0] - x_r) - P[1]) % p
+    return (x_r, y_r)
+
+# Scalar multiplication
+def scalar_mult(k, P):
+    R = (0, 0)
+    while k:
+        if k & 1:
+            R = point_add(R, P)
+        P = point_add(P, P)
+        k >>= 1
+    return R
+
+# Key generation
+def gen_keypair():
+    d = random.randrange(1, n)
+    P = scalar_mult(d, G)
+    return d, P
+
+# SM2 signature
+def sm2_sign(msg, d):
+    e = int(sha256(msg).hexdigest(), 16)
+    while True:
+        k = random.randrange(1, n)
+        x1, _ = scalar_mult(k, G)
+        r = (e + x1) % n
+        if r == 0 or r + k == n: continue
+        s = (mod_inv(1 + d, n) * (k - r * d)) % n
+        if s != 0:
+            return (r, s)
+
+# SM2 verification
+def sm2_verify(msg, sig, P):
+    r, s = sig
+    if not (1 <= r <= n-1 and 1 <= s <= n-1): return False
+    e = int(sha256(msg).hexdigest(), 16)
+    t = (r + s) % n
+    if t == 0: return False
+    P1 = scalar_mult(s, G)
+    P2 = scalar_mult(t, P)
+    x1, _ = point_add(P1, P2)
+    R = (e + x1) % n
+    return R == r
+
+# Test
+if __name__ == "__main__":
+    d, P = gen_keypair()
+    msg = b"Hello SM2"
+    sig = sm2_sign(msg, d)
+    print("Signature:", sig)
+    print("Verify:", sm2_verify(msg, sig, P))
